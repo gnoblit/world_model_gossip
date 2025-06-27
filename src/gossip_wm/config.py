@@ -29,6 +29,8 @@ BETA_ANNEAL_STEPS = 3000 # Number of steps to go from beta=0 to beta=BETA_KL_MAX
 GOSSIP_WEIGHT = 0.1
 # The number of steps to "dream" forward for the gossip protocol.
 GOSSIP_DREAM_STEPS = 25
+# Default number of agents in the society
+GOSSIP_NUM_AGENTS = 2    
 
 # --- Data Collection ---
 # Number of random steps to seed the buffer before training starts.

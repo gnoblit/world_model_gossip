@@ -1,0 +1,29 @@
+{
+    "ACTION_DIM": 3,
+    "BATCH_SIZE": 64,
+    "BETA_ANNEAL_STEPS": 3000,
+    "BETA_KL_MAX": 1.0,
+    "BUFFER_CAPACITY": 200000,
+    "DEVICE": "cuda",
+    "ENV_NAME": "CarRacing-v3",
+    "GOSSIP_DREAM_STEPS": 25,
+    "GOSSIP_NUM_AGENTS": 2,
+    "GOSSIP_WEIGHT": 0.1,
+    "LATENT_DIM": 32,
+    "LEARNING_RATE": 0.0001,
+    "LOG_INTERVAL": 200,
+    "RESIZE_DIM": [
+        64,
+        64
+    ],
+    "SAVE_MODEL_INTERVAL": 1000,
+    "SEED_STEPS": 5000,
+    "SEQUENCE_LENGTH": 50,
+    "TRANSITION_HIDDEN_DIM": 256,
+    "args": {
+        "mode": "gossip",
+        "num_agents": 2,
+        "steps": 15000,
+        "vae_run_id": "2025-06-26_19-55_1772a4"
+    }
+}
