@@ -4,6 +4,7 @@ import gymnasium as gym
 import numpy as np
 import cv2  # Fast image processing
 from gymnasium.spaces import Box
+from . import config # Import the config file
 
 class CarRacingWrapper(gym.Wrapper):
     """
@@ -15,7 +16,7 @@ class CarRacingWrapper(gym.Wrapper):
     """
     def __init__(self, env, resize_dim=(64,64)):
         super(CarRacingWrapper, self).__init__(env)
-        self.new_size = resize_dim
+        self.resize_dim = config.RESIZE_DIM
 
         # Update the observation space to reflect the preprocessed output.
         # Preprocessed observations are single-channel (grayscale), resized,
