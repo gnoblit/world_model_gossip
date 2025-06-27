@@ -285,14 +285,23 @@ def train_gossip(run_dir, vae_run_id, num_agents, num_steps=15000):
         final_z_i, final_z_j = dream_zs[0], dream_zs[1]
 
         with torch.amp.autocast(device_type=config.DEVICE.type, enabled=(config.DEVICE.type == 'cuda')):
+            # Decode each other's final dream frame
             img_i = agent_i.vae.decoder(final_z_i.detach())
             img_j = agent_j.vae.decoder(final_z_j.detach())
+            
+            # Re-encode with the other's VAE
             mu_j_from_i, _ = agent_j.vae.encoder(img_i)
             mu_i_from_j, _ = agent_i.vae.encoder(img_j)
             
-            loss_i = F.mse_loss(final_z_i, mu_i_from_j)
-            loss_j = F.mse_loss(final_z_j, mu_j_from_i)
-        
+            # --- THE FIX: Squeeze the sequence dimension from the dream states ---
+            # This changes their shape from [1, 1, 32] to [1, 32], matching the encoder output.
+            final_z_i_squeezed = final_z_i.squeeze(1)
+            final_z_j_squeezed = final_z_j.squeeze(1)
+            
+            # Now both tensors in the loss have the same shape: [1, 32]
+            loss_i = F.mse_loss(final_z_i_squeezed, mu_i_from_j)
+            loss_j = F.mse_loss(final_z_j_squeezed, mu_j_from_i)
+                    
         optim_i.zero_grad(set_to_none=True)
         scaler.scale(loss_i).backward()
         scaler.step(optim_i)
