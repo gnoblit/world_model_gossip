@@ -18,6 +18,28 @@ class ReplayBuffer:
         """Saves a single transition."""
         self.memory.append((obs, action, reward, next_obs, done))
 
+    def sample_transitions(self, batch_size):
+        """
+        Samples a batch of single transitions randomly from memory.
+        This is ideal for VAE training.
+        """
+        if len(self) < batch_size:
+            return None
+        
+        # random.sample is efficient for deques
+        transitions = random.sample(self.memory, batch_size)
+        
+        # Transpose the batch and convert to tensors
+        obs, action, reward, next_obs, done = zip(*transitions)
+        
+        obs_batch = torch.from_numpy(np.array(obs)).float().to(config.DEVICE)
+        action_batch = torch.from_numpy(np.array(action)).float().to(config.DEVICE)
+        reward_batch = torch.from_numpy(np.array(reward)).float().to(config.DEVICE).unsqueeze(1)
+        next_obs_batch = torch.from_numpy(np.array(next_obs)).float().to(config.DEVICE)
+        done_batch = torch.from_numpy(np.array(done, dtype=np.float32)).float().to(config.DEVICE).unsqueeze(1)
+
+        return obs_batch, action_batch, reward_batch, next_obs_batch, done_batch
+    
     def sample_sequences(self, batch_size, seq_len):
         """Efficiently samples a batch of consecutive sequences of transitions."""
         n_transitions = len(self.memory)
