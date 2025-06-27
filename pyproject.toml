@@ -61,7 +61,6 @@ exclude = [
 # Configuration for the Pytest testing framework
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q"
 testpaths = [
     "tests", 
 ]
