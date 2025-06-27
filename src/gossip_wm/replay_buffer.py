@@ -18,7 +18,7 @@ class ReplayBuffer:
         """Saves a transition."""
         self.memory.append((obs, action, reward, next_obs, done))
 
-    def sample_transition(self, batch_size):
+    def sample_transitions(self, batch_size):
         """
         Samples a batch of single transitions and converts them to PyTorch tensors.
         Useful for training the VAE.
@@ -37,5 +37,5 @@ class ReplayBuffer:
 
         return obs_batch, action_batch, reward_batch, next_obs_batch, done_batch
     
-        def __len__(self):
-            return len(self.memory)
+    def __len__(self):
+        return len(self.memory)
