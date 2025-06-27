@@ -301,17 +301,25 @@ def train_gossip(run_dir, vae_run_id, num_agents, num_steps=15000):
             # Now both tensors in the loss have the same shape: [1, 32]
             loss_i = F.mse_loss(final_z_i_squeezed, mu_i_from_j)
             loss_j = F.mse_loss(final_z_j_squeezed, mu_j_from_i)
-                    
+
         optim_i.zero_grad(set_to_none=True)
         scaler.scale(loss_i).backward()
+        # Unscale the gradients of THIS optimizer specifically
+        scaler.unscale_(optim_i) 
+        clip_grad_norm_(agent_i.transition.parameters(), max_norm=1.0)
         scaler.step(optim_i)
         
+        # Update Agent j
         optim_j.zero_grad(set_to_none=True)
         scaler.scale(loss_j).backward()
+        # Unscale the gradients of THIS optimizer specifically
+        scaler.unscale_(optim_j)
+        clip_grad_norm_(agent_j.transition.parameters(), max_norm=1.0)
         scaler.step(optim_j)
 
+        # Update the scaler once at the end of the step
         scaler.update()
-
+        
         loss_histories[f"loss_agent_{idx_i}"].append(loss_i.item())
         loss_histories[f"loss_agent_{idx_j}"].append(loss_j.item())
         avg_loss = (loss_i.item() + loss_j.item()) / 2
