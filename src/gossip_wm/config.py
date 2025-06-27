@@ -21,9 +21,9 @@ TRANSITION_HIDDEN_DIM = 256 # Hidden state size of the GRU/LSTM in the transitio
 
 # --- Training ---
 LEARNING_RATE = 1e-4
-# Weight for the KL divergence loss in the VAE. A common practice is to start small
-# and anneal it, but a fixed small value is a good starting point.
-BETA_KL = 1.0
+# BETA_KL is now the *maximum* value. We will anneal towards it.
+BETA_KL_MAX = 1.0
+BETA_ANNEAL_STEPS = 2000 # Number of steps to go from beta=0 to beta=BETA_KL_MAX
 # Weight for our novel gossip/consistency loss.
 # Start with a value to make it influential but not overpowering.
 GOSSIP_WEIGHT = 0.1
