@@ -1,7 +1,67 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "wm-gossip"
+authors = [
+  { name="Graham Noblit", email="grahamnoblit@pm.me" },
+]
 version = "0.1.0"
-description = "Add your description here"
+description = "Testing whether grounding in shared views helps world model hallucination"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.9"
+dependencies = [
+    "torch",                 # The primary deep learning framework
+    "torchvision",
+    "numpy",                 # Fundamental package for scientific computing
+    "gymnasium[all]",             # The modern replacement for OpenAI Gym
+    "Pillow",                # For image manipulation (from decoders)
+    "tensorboard",           # For logging and visualizing metrics
+    "tqdm",                  # For progress bars in training loops
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/gossip-world-models"
+"Bug Tracker" = "https://github.com/your-username/gossip-world-models/issues"
+
+# --- Optional Dependencies ---
+# These can be installed on-demand using `pip install .[dev,envs]`
+[project.optional-dependencies]
+# Dependencies for development: testing, linting, formatting
+dev = [
+    "pytest", 
+    "ruff", 
+    "pre-commit",
+]
+# Dependencies for specific RL environments mentioned in the proposal
+envs = [
+    "gymnasium[box2d]",      # For the CarRacing-v2 environment
+    # "phyre",               # Phyre can have a complex installation, add if needed
+]
+
+# --- Tool Configuration ---
+
+# For the /src layout to work correctly!
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+select = ["E", "W", "F", "I", "C90", "N"] 
+
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+]
+
+# Configuration for the Pytest testing framework
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests", 
+]
