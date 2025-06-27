@@ -36,7 +36,7 @@ dev = [
 ]
 # Dependencies for specific RL environments mentioned in the proposal
 envs = [
-    "gymnasium[box2d]",      # For the CarRacing-v2 environment
+    "gymnasium[box2d]",      # For the CarRacing-v3 environment
     # "phyre",               # Phyre can have a complex installation, add if needed
 ]
 
