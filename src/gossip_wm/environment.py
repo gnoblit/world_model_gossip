@@ -4,7 +4,7 @@ import gymnasium as gym
 import numpy as np
 import cv2  # Fast image processing
 from gymnasium.spaces import Box
-from . import config # Import the config file
+from gossip_wm  import config # Import the config file
 
 class CarRacingWrapper(gym.Wrapper):
     """

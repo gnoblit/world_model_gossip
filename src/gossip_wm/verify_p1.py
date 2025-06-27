@@ -4,9 +4,9 @@ from torchvision.utils import save_image
 from tqdm import tqdm
 
 # Import our custom modules
-from src.gossip_wm.environment import CarRacingWrapper
-from src.gossip_wm.replay_buffer import ReplayBuffer
-from src.gossip_wm import config # Import the config
+from gossip_wm.environment import CarRacingWrapper
+from gossip_wm.replay_buffer import ReplayBuffer
+from gossip_wm import config # Import the config
 
 def main():
     print("--- Phase 1 Verification (with Config) ---")

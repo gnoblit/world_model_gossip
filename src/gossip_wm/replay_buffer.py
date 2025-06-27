@@ -4,7 +4,7 @@ import random
 from collections import deque
 import torch
 import numpy as np
-from . import config
+from gossip_wm  import config
 
 class ReplayBuffer:
     """A simple replay buffer for storing and sampling transitions."""
