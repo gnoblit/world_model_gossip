@@ -23,3 +23,20 @@ Our solution, the **"Gossip" Protocol**, is a procedural check inspired by socia
 4.  A **consistency loss** penalizes a model if it cannot comprehend the other's dream.
     `Loss_A = || z_A_N - Encoder_A(Decoder_B(z_B_N)) ||²`
 This "social pressure" forces the models to discard idiosyncratic fantasies and converge on the essential, shared dynamics of the environment.
+
+## 2. System Prerequisites
+
+Before installing the Python packages, you must ensure the following system-level dependencies are installed.
+
+**1. Git:**
+Required for cloning this repository and installing some Python packages directly from GitHub.
+-   **Ubuntu/Debian:** `sudo apt update && sudo apt install git`
+-   **macOS (with Homebrew):** `brew install git`
+
+**2. Java JDK 8:**
+The `minerl` package specifically requires Java Development Kit version 8.
+-   **Ubuntu/Debian:** `sudo apt install openjdk-8-jdk`
+-   **Fedora/CentOS:** `sudo dnf install java-1.8.0-openjdk-devel`
+-   **macOS (with Homebrew):** `brew tap homebrew/cask-versions && brew install --cask temurin@8`
+
+After installing, verify the version by opening a **new terminal** and running `java -version`. The output should mention version "1.8.0".

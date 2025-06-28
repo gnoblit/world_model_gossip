@@ -7,7 +7,6 @@ wheels/
 *.egg-info
 
 # misc.
-idea.md
 
 # Virtual environments
 .venv
@@ -17,3 +16,8 @@ models/
 
 # Results
 *.png
+*.gif
+runs/
+
+# data
+*.pkl

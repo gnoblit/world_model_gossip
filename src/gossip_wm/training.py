@@ -11,9 +11,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import pickle 
 
 # Import from our own library
-from .environment import CarRacingWrapper
+from .envs import make_env 
 from .replay_buffer import ReplayBuffer
 from .models import VAE, WorldModel, vae_loss_function, reparameterize
 from . import config
@@ -96,19 +97,48 @@ def plot_loss_curves(losses, title, filename, run_dir):
     plt.close()
     print(f"Saved loss plot to {save_path}")
 
+def generate_and_save_buffer(num_steps, save_path):
+    """Generates experience by running a random agent and saves the buffer to disk."""
+    print(f"--- Generating {num_steps} steps of experience for {config.ENV_NAME} ---")
+    
+    env = make_env(config.ENV_NAME)
+    buffer = ReplayBuffer(capacity=num_steps) # Capacity is the number of steps to generate
+    
+    obs, _ = env.reset()
+    for _ in tqdm(range(num_steps), desc="Generating Data"):
+        action = env.action_space.sample()
+        next_obs, reward, terminated, truncated, _ = env.step(action)
+        done = terminated or truncated
+        buffer.push(obs, action, reward, next_obs, done)
+        obs = next_obs if not done else env.reset()[0]
+        
+    env.close()
+    
+    # Save the populated buffer to a file
+    with open(save_path, 'wb') as f:
+        pickle.dump(buffer, f)
+    print(f"\nSuccessfully saved replay buffer with {len(buffer)} transitions to {save_path}")
 ### =================================================================
 ###                   TRAINING FUNCTION: VAE
 ### =================================================================
 
-def train_vae_only(run_dir, num_steps=10000):
+def train_vae_only(run_dir, buffer_path, num_steps=10000):
     """Trains only the VAE component of the World Model."""
     print("--- Training Mode: VAE Only ---")
+    
+    try:
+        with open(buffer_path, 'rb') as f:
+            buffer = pickle.load(f)
+        print(f"Successfully loaded replay buffer from {buffer_path}")
+    except FileNotFoundError:
+        print(f"ERROR: Replay buffer not found at '{buffer_path}'.")
+        print("Please run --mode data first to generate a buffer.")
+        return
     
     model = VAE(latent_dim=config.LATENT_DIM).to(config.DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     
-    env = CarRacingWrapper(gymnasium.make(config.ENV_NAME, continuous=True))
-    buffer = ReplayBuffer(capacity=config.BUFFER_CAPACITY)
+    env = make_env(gymnasium.make(config.ENV_NAME, continuous=True))
     
     print(f"Populating buffer with {config.SEED_STEPS} random steps...")
     obs, _ = env.reset()
@@ -156,7 +186,7 @@ def train_vae_only(run_dir, num_steps=10000):
 ###                TRAINING FUNCTION: DYNAMICS (BASELINE)
 ### =================================================================
 
-def train_dynamics_baseline(run_dir, vae_run_id, num_steps=10000):
+def train_dynamics_baseline(run_dir, vae_run_id, buffer_path, num_steps=10000):
     """Trains the dynamics model (TransitionModel) only, assuming a pre-trained VAE."""
     print("--- Training Mode: Dynamics Baseline ---")
     
@@ -168,8 +198,15 @@ def train_dynamics_baseline(run_dir, vae_run_id, num_steps=10000):
         print(f"ERROR: Pre-trained VAE weights not found at '{vae_path}'.")
         return
 
-    env = CarRacingWrapper(gymnasium.make(config.ENV_NAME, continuous=True))
-    pixel_buffer = ReplayBuffer(capacity=config.SEED_STEPS)
+    env = make_env(gymnasium.make(config.ENV_NAME, continuous=True))
+        # --- UPDATED: Load buffer from file ---
+    try:
+        with open(buffer_path, 'rb') as f:
+            pixel_buffer = pickle.load(f)
+        print(f"Successfully loaded replay buffer from {buffer_path}")
+    except FileNotFoundError:
+        print(f"ERROR: Replay buffer not found at '{buffer_path}'.")
+        return
     # ... (data collection)
     
     latent_buffer_list = pre_encode_buffer(model, pixel_buffer)
@@ -223,7 +260,7 @@ def train_dynamics_baseline(run_dir, vae_run_id, num_steps=10000):
 ### =================================================================
 ###                   TRAINING FUNCTION: GOSSIP
 ### =================================================================
-def train_gossip(run_dir, vae_run_id, num_agents, num_steps=15000):
+def train_gossip(run_dir, vae_run_id, buffer_path, num_agents, num_steps=15000):
     """Trains a 'society' of world models using the gossip protocol."""
     print(f"--- Training Mode: Gossip with {num_agents} agents ---")
     
@@ -235,15 +272,24 @@ def train_gossip(run_dir, vae_run_id, num_agents, num_steps=15000):
     try:
         for model in models:
             model.load_vae_weights(path=vae_path)
-            model.vae.eval()
+            model.vae.eval() # VAE is pre-trained and frozen
             model.transition.train()
     except FileNotFoundError:
         print(f"ERROR: Pre-trained VAE weights not found at '{vae_path}'.")
         return
 
-    env = CarRacingWrapper(gymnasium.make(config.ENV_NAME, continuous=True))
-    pixel_buffer = ReplayBuffer(capacity=config.SEED_STEPS)
-    # ... (data collection) ...
+    env = make_env(gymnasium.make(config.ENV_NAME, continuous=True))
+    try:
+        with open(buffer_path, 'rb') as f:
+            pixel_buffer = pickle.load(f)
+        print(f"Successfully loaded replay buffer from {buffer_path}")
+    except FileNotFoundError:
+        print(f"ERROR: Replay buffer not found at '{buffer_path}'.")
+        return
+        
+    latent_buffer_list = pre_encode_buffer(models[0], pixel_buffer)
+    del pixel_buffer
+    
     obs, _ = env.reset()
     for _ in tqdm(range(config.SEED_STEPS), desc="Seeding Buffer"):
         action = env.action_space.sample()
@@ -255,7 +301,8 @@ def train_gossip(run_dir, vae_run_id, num_agents, num_steps=15000):
     latent_buffer_list = pre_encode_buffer(models[0], pixel_buffer)
     del pixel_buffer
     
-    scaler = torch.cuda.amp.GradScaler(enabled=(config.DEVICE.type == 'cuda'))
+    # FIX 1: Update GradScaler instantiation to the modern API
+    scaler = torch.amp.GradScaler( enabled=(config.DEVICE.type == 'cuda'))
     
     print(f"\nStarting gossip training for {num_steps} steps...")
     
@@ -272,54 +319,66 @@ def train_gossip(run_dir, vae_run_id, num_agents, num_steps=15000):
         start_z_numpy, _, _, _ = latent_buffer_list[start_idx]
         start_z = torch.from_numpy(start_z_numpy).unsqueeze(0).to(config.DEVICE)
         
-        dream_zs = []
-        with torch.no_grad():
-            for agent in [agent_i, agent_j]:
-                z, hidden = start_z, None
-                action = torch.tensor([0.0, 0.5, 0.0]).unsqueeze(0).to(config.DEVICE)
-                for _ in range(config.GOSSIP_DREAM_STEPS):
-                    mu, _, hidden = agent.transition(z, action, hidden)
-                    z = mu
-                dream_zs.append(z)
-        
-        final_z_i, final_z_j = dream_zs[0], dream_zs[1]
+        # Zero gradients for BOTH optimizers before the forward pass
+        optim_i.zero_grad(set_to_none=True)
+        optim_j.zero_grad(set_to_none=True)
 
+        # Autocast context for the forward pass
         with torch.amp.autocast(device_type=config.DEVICE.type, enabled=(config.DEVICE.type == 'cuda')):
-            # Decode each other's final dream frame
-            img_i = agent_i.vae.decoder(final_z_i.detach())
-            img_j = agent_j.vae.decoder(final_z_j.detach())
+            # FIX 2: THIS IS THE MAIN FIX.
+            # The dreaming process MUST have gradients enabled to train the transition models.
+            # We remove the `with torch.no_grad():` block that was here before.
             
-            # Re-encode with the other's VAE
-            mu_j_from_i, _ = agent_j.vae.encoder(img_i)
-            mu_i_from_j, _ = agent_i.vae.encoder(img_j)
+            # Dream forward with agent i to get its final latent state
+            z_i, hidden_i = start_z, None
+            action = torch.tensor([0.0, 0.5, 0.0]).unsqueeze(0).to(config.DEVICE) 
+            for _ in range(config.GOSSIP_DREAM_STEPS):
+                mu_i, _, hidden_i = agent_i.transition(z_i, action, hidden_i)
+                z_i = mu_i
+            final_z_i = z_i
+
+            # Dream forward with agent j
+            z_j, hidden_j = start_z, None
+            for _ in range(config.GOSSIP_DREAM_STEPS):
+                mu_j, _, hidden_j = agent_j.transition(z_j, action, hidden_j)
+                z_j = mu_j
+            final_z_j = z_j
+
+            # The targets for the loss are computed from the final dream states.
+            # These should be detached so we don't backprop through the VAEs or the other agent's model.
+            with torch.no_grad():
+                img_i = agent_i.vae.decoder(final_z_i)
+                img_j = agent_j.vae.decoder(final_z_j)
+                
+                mu_j_from_i, _ = agent_j.vae.encoder(img_i)
+                mu_i_from_j, _ = agent_i.vae.encoder(img_j)
             
-            # --- THE FIX: Squeeze the sequence dimension from the dream states ---
-            # This changes their shape from [1, 1, 32] to [1, 32], matching the encoder output.
+            # Calculate losses based on the gossip protocol
             final_z_i_squeezed = final_z_i.squeeze(1)
             final_z_j_squeezed = final_z_j.squeeze(1)
             
-            # Now both tensors in the loss have the same shape: [1, 32]
             loss_i = F.mse_loss(final_z_i_squeezed, mu_i_from_j)
             loss_j = F.mse_loss(final_z_j_squeezed, mu_j_from_i)
+            
+            # Combine the losses before the backward pass
+            total_gossip_loss = config.GOSSIP_WEIGHT * (loss_i + loss_j)
 
-        optim_i.zero_grad(set_to_none=True)
-        scaler.scale(loss_i).backward()
-        # Unscale the gradients of THIS optimizer specifically
-        scaler.unscale_(optim_i) 
+        # Scale and backpropagate the combined loss.
+        # This will now correctly populate .grad for parameters in both transition models.
+        scaler.scale(total_gossip_loss).backward()
+        
+        # Unscale and step each optimizer individually
+        scaler.unscale_(optim_i)
         clip_grad_norm_(agent_i.transition.parameters(), max_norm=1.0)
         scaler.step(optim_i)
-        
-        # Update Agent j
-        optim_j.zero_grad(set_to_none=True)
-        scaler.scale(loss_j).backward()
-        # Unscale the gradients of THIS optimizer specifically
+
         scaler.unscale_(optim_j)
         clip_grad_norm_(agent_j.transition.parameters(), max_norm=1.0)
         scaler.step(optim_j)
-
-        # Update the scaler once at the end of the step
-        scaler.update()
         
+        # Update the scaler once at the end
+        scaler.update()
+                
         loss_histories[f"loss_agent_{idx_i}"].append(loss_i.item())
         loss_histories[f"loss_agent_{idx_j}"].append(loss_j.item())
         avg_loss = (loss_i.item() + loss_j.item()) / 2

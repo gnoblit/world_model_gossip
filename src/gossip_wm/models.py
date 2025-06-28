@@ -147,10 +147,14 @@ class WorldModel(nn.Module):
     """
     def __init__(self):
         super(WorldModel, self).__init__()
+
+        env_config = config.get_env_config()
+        action_dim = env_config['ACTION_DIM']
+
         self.vae = VAE(latent_dim=config.LATENT_DIM)
         self.transition = TransitionModel(
             latent_dim=config.LATENT_DIM,
-            action_dim=config.ACTION_DIM,
+            action_dim=action_dim,
             hidden_dim=config.TRANSITION_HIDDEN_DIM
         )
 

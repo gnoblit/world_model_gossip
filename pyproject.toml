@@ -10,15 +10,16 @@ authors = [
 version = "0.1.0"
 description = "Testing whether grounding in shared views helps world model hallucination"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9, <3.12"
 dependencies = [
     "torch",                 # The primary deep learning framework
     "torchvision",
     "numpy",                 # Fundamental package for scientific computing
-    "gymnasium[all]",             # The modern replacement for OpenAI Gym
     "Pillow",                # For image manipulation (from decoders)
+    "imageio",      # Gifs
     "tensorboard",           # For logging and visualizing metrics
     "tqdm",                  # For progress bars in training loops
+    "setuptools",
 ]
 
 [project.urls]
@@ -26,41 +27,39 @@ Homepage = "https://github.com/your-username/gossip-world-models"
 "Bug Tracker" = "https://github.com/your-username/gossip-world-models/issues"
 
 # --- Optional Dependencies ---
-# These can be installed on-demand using `pip install .[dev,envs]`
+# Install with `pip install -e .[dev]`, `pip install -e .[envs]`, etc.
 [project.optional-dependencies]
-# Dependencies for development: testing, linting, formatting
+# 1. Dependencies for local development (testing, linting)
 dev = [
     "pytest", 
     "ruff", 
     "pre-commit",
 ]
-# Dependencies for specific RL environments mentioned in the proposal
+
+# 2. Dependencies for ALL supported reinforcement learning environments
 envs = [
-    "gymnasium[box2d]",      # For the CarRacing-v3 environment
-    # "phyre",               # Phyre can have a complex installation, add if needed
+    "gymnasium[box2d]", # For CarRacing, BipedalWalker, LunarLander
+    "minigrid",
+    "crafter",
+    "minerl @ git+https://github.com/minerllabs/minerl",
 ]
+
+# 3. A convenience group to install everything
+all = [
+    "wm-gossip[dev,envs]", # This tells pip to install the dev and envs groups
+]
+
 
 # --- Tool Configuration ---
 
-# For the /src layout to work correctly!
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.ruff]
 line-length = 88
 select = ["E", "W", "F", "I", "C90", "N"] 
+exclude = [".git", "__pycache__", "build", "dist", ".venv"]
 
-exclude = [
-    ".git",
-    "__pycache__",
-    "build",
-    "dist",
-    ".venv",
-]
-
-# Configuration for the Pytest testing framework
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = [
-    "tests", 
-]
+testpaths = ["tests"]
