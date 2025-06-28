@@ -1,3 +1,4 @@
+# src/gossip_wm/config.py
 ### Stores parameters
 
 import torch
@@ -49,7 +50,7 @@ ENV_CONFIGS = {
         "GYM_KWARGS": {"render_mode": "rgb_array"}
     },
     # --- Placeholders for our future environments ---
-    "LunarLander-v3": { # CORRECTED: Changed v2 to v3
+    "LunarLander-v3": { 
         "ACTION_DIM": 4, # 0:noop, 1:fire-left, 2:fire-main, 3:fire-right
         "IS_DISCRETE": True,
         "GYM_KWARGS": {"render_mode": "rgb_array", "continuous": False}
@@ -60,7 +61,9 @@ ENV_CONFIGS = {
         "GYM_KWARGS": {} # No special kwargs needed
     },
     "VizdoomBasic-v0": {
-        "ACTION_DIM": 3, # 0: ATTACK, 1: MOVE_RIGHT, 2: MOVE_LEFT
+        # *** FIX: Corrected from 3 to 4. ***
+        # The env has 4 actions: NO_OP, ATTACK, MOVE_RIGHT, MOVE_LEFT
+        "ACTION_DIM": 4, 
         "IS_DISCRETE": True,
         "GYM_KWARGS": {} # No special kwargs needed
     }

@@ -1,68 +1,75 @@
-# src/gossip_wm/envs/__init__.py
+# tests/test_envs.py
+import pytest
+import gymnasium as gym
+import numpy as np
 
-# No top-level gym import needed here anymore for make
 from gossip_wm import config
+from gossip_wm.envs import make_env
+from tests.conftest import SUPPORTED_ENVS
 
-# Import all your wrappers
-from gossip_wm.envs.car_racing_wrapper import CarRacingWrapper
-from gossip_wm.envs.bipedal_walker_wrapper import BipedalWalkerWrapper
-from gossip_wm.envs.lunar_lander_wrapper import LunarLanderWrapper
-from gossip_wm.envs.minigrid_wrapper import MiniGridWrapper
-from gossip_wm.envs.vizdoom_wrapper import ViZDoomWrapper 
+# Helper to check if a package is available for skipping tests
+def is_pkg_installed(pkg_name):
+    """Checks if a package is installed without importing it everywhere."""
+    try:
+        __import__(pkg_name)
+        return True
+    except ImportError:
+        return False
 
-def make_env(env_name):
+@pytest.mark.parametrize("env_name", SUPPORTED_ENVS)
+def test_env_creation_and_wrapper(env_name):
     """
-    Environment Factory that directly instantiates envs to bypass entry_point conflicts.
+    Tests that each supported environment can be created via the factory,
+    and that the wrapper provides the correct observation and action spaces.
+    Skips tests for environments whose dependencies are not installed.
     """
-    print(f"Creating environment via direct instantiation: {env_name}")
-    
-    env_config = config.ENV_CONFIGS[env_name]
-    kwargs = env_config.get("GYM_KWARGS", {})
-    
-    # --- Dispatcher to create the base environment ---
-    
-    if env_name == "CarRacing-v3":
-        # Import the specific class
-        from gymnasium.envs.box2d.car_racing import CarRacing
-        base_env = CarRacing(**kwargs)
-        return CarRacingWrapper(base_env)
-        
-    elif env_name == "BipedalWalker-v3":
-        from gymnasium.envs.box2d.bipedal_walker import BipedalWalker
-        base_env = BipedalWalker(**kwargs)
-        return BipedalWalkerWrapper(base_env)
+    if "MiniGrid" in env_name and not is_pkg_installed("minigrid"):
+        pytest.skip(f"minigrid not installed, skipping {env_name}.")
+    if "Vizdoom" in env_name and not is_pkg_installed("vizdoom"):
+        pytest.skip(f"vizdoom not installed, skipping {env_name}.")
+    if any(box2d_env in env_name for box2d_env in ["CarRacing", "BipedalWalker", "LunarLander"]):
+        if not is_pkg_installed("Box2D"):
+             pytest.skip(f"Box2D dependencies not installed, skipping {env_name}.")
 
-    elif env_name == "LunarLander-v3":
-        # Note: The class name might not match the env ID exactly.
-        # It's LunarLander for the ID LunarLander-v2/v3
-        from gymnasium.envs.box2d.lunar_lander import LunarLander
-        base_env = LunarLander(**kwargs)
-        return LunarLanderWrapper(base_env)
+    original_env_name = config.ENV_NAME
+    config.ENV_NAME = env_name
+    
+    env_conf = config.get_env_config()
+    env = make_env(env_name)
 
-    elif env_name.startswith("MiniGrid"):
-        # MiniGrid requires its own import
-        import minigrid.envs
-        # We can still use gym.make here if we are confident the conflict
-        # is with another package, but to be safe, we can be explicit.
-        # For simplicity and robustness, let's stick to gym.make JUST for minigrid/craftium
-        # if their class mappings are complex. A better way is direct import.
-        from minigrid.envs.doorkey import DoorKeyEnv
-        base_env = DoorKeyEnv(**kwargs) # Assumes DoorKey-8x8
-        return MiniGridWrapper(base_env)
-        
-    elif env_name.startswith("Vizdoom"):
-        try:
-            # We still need to import craftium to register it, but we can
-            # then call make on it specifically.
-            import vizdoom
-            import gymnasium as gym # Local import to be safe
-            base_env = gym.make(env_name, **kwargs)
-            return ViZDoomWrapper(base_env)
-        except ImportError:
-            print("ViZDoom not installed, cannot create environment.")
-            raise
-            
+    assert isinstance(env, gym.Wrapper)
+    
+    expected_obs_shape = (1, *config.RESIZE_DIM)
+    assert env.observation_space.shape == expected_obs_shape, "Observation space shape is incorrect."
+    assert env.observation_space.dtype == np.float32, "Observation space dtype should be float32."
+
+    if env_conf["IS_DISCRETE"]:
+        assert isinstance(env.action_space, gym.spaces.Discrete)
+        assert env.action_space.n == env_conf["ACTION_DIM"]
     else:
-        raise ValueError(f"Environment '{env_name}' not supported by direct instantiation.")
+        assert isinstance(env.action_space, gym.spaces.Box)
+        assert env.action_space.shape == (env_conf["ACTION_DIM"],)
 
-__all__ = ["make_env"]
+    obs, info = env.reset(seed=42)
+    assert obs.shape == expected_obs_shape
+    assert obs.min() >= 0.0 and obs.max() <= 1.0, "Observation not normalized."
+
+    action = env.action_space.sample()
+        
+    # No longer needed, wrapper handles it.
+    # if isinstance(env.action_space, gym.spaces.Box):
+    #     action = action.astype(np.float32)
+        
+    next_obs, reward, terminated, truncated, info = env.step(action)
+    
+    assert next_obs.shape == expected_obs_shape
+    assert next_obs.min() >= 0.0 and next_obs.max() <= 1.0, "Next observation not normalized."
+    
+    assert isinstance(reward, (int, float, np.number))
+    
+    assert isinstance(terminated, bool)
+    assert isinstance(truncated, bool)
+
+    env.close()
+    
+    config.ENV_NAME = original_env_name

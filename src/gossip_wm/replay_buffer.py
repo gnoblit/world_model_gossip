@@ -75,7 +75,7 @@ class ReplayBuffer:
         reward_batch = torch.from_numpy(np.array(rew_seqs)).float().to(config.DEVICE).unsqueeze(-1)
         done_batch = torch.from_numpy(np.array(done_seqs, dtype=np.float32)).float().to(config.DEVICE).unsqueeze(-1)
 
-        return obs_batch, action_batch, reward_batch
+        return obs_batch, action_batch, reward_batch, done_batch
 
     def __len__(self):
         return len(self.memory)

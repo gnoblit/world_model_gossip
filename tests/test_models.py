@@ -1,3 +1,4 @@
+# tests/test_models.py
 import pytest
 import torch
 import torch.nn.functional as F
@@ -6,7 +7,7 @@ from gossip_wm import config
 from gossip_wm.models import reparameterize, vae_loss_function, WorldModel, TransitionModel
 from tests.conftest import SUPPORTED_ENVS
 
-# Note: VAE and some other models are imported from conftest.py as fixtures
+# Note: VAE and other models are imported from conftest.py as fixtures
 
 def test_reparameterize(dummy_latent_batch):
     """Tests the reparameterization trick."""
@@ -79,20 +80,25 @@ def test_transition_model_shapes_all_envs(env_name, device):
     
     if is_discrete:
         # For discrete actions, create integer indices and one-hot encode them
-        act_indices = torch.randint(0, action_dim, (config.BATCH_SIZE, config.SEQUENCE_LENGTH))
-        act_seq = F.one_hot(act_indices, num_classes=action_dim).float().to(device)
+        act_indices = torch.randint(0, action_dim, (config.BATCH_SIZE, config.SEQUENCE_LENGTH)).to(device)
+        act_seq = F.one_hot(act_indices, num_classes=action_dim).float()
     else:
         # For continuous actions, create random floats
         act_seq = torch.rand(config.BATCH_SIZE, config.SEQUENCE_LENGTH, action_dim).to(device)
     
     # We predict the next T-1 states from the first T-1 states and actions
-    pred_mu, pred_logvar, hidden = model(z_seq[:, :-1, :], act_seq[:, :-1, :])
+    pred_mu, pred_logvar, pred_done, next_hidden = model(z_seq[:, :-1, :], act_seq[:, :-1, :])
     
-    # Output should have T-1 sequence length
-    expected_shape = (config.BATCH_SIZE, config.SEQUENCE_LENGTH - 1, config.LATENT_DIM)
-    assert pred_mu.shape == expected_shape
-    assert pred_logvar.shape == expected_shape
-    assert hidden.shape == (1, config.BATCH_SIZE, config.TRANSITION_HIDDEN_DIM)
+    # Expected shape for latent vectors
+    expected_latent_shape = (config.BATCH_SIZE, config.SEQUENCE_LENGTH - 1, config.LATENT_DIM)
+    assert pred_mu.shape == expected_latent_shape
+    assert pred_logvar.shape == expected_latent_shape
+    
+    # Expected shape for done logits (one logit per sequence step)
+    expected_done_shape = (config.BATCH_SIZE, config.SEQUENCE_LENGTH - 1, 1)
+    assert pred_done.shape == expected_done_shape
+    
+    assert next_hidden.shape == (1, config.BATCH_SIZE, config.TRANSITION_HIDDEN_DIM)
     
     config.ENV_NAME = original_env_name
 

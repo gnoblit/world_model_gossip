@@ -1,3 +1,4 @@
+# src/gossip_wm/envs/lunar_lander_wrapper.py
 import gymnasium as gym
 import numpy as np
 import cv2
@@ -25,6 +26,10 @@ class LunarLanderWrapper(BaseEnvWrapper):
     @property
     def action_space(self):
         return self._action_space
+
+    # *** FIX: Fulfill the abstract base class contract. ***
+    def observation(self, obs):
+        pass
 
     def _get_pixel_obs(self):
         obs = self.env.render()

@@ -1,3 +1,4 @@
+# tests/test_replay_buffer.py
 import pytest
 import numpy as np
 import torch
@@ -24,17 +25,15 @@ def test_buffer_capacity():
     capacity = 10
     buffer = ReplayBuffer(capacity=capacity)
     for i in range(capacity + 5):
-        # The 'obs' is the unique identifier for the transition
         buffer.push(f"obs_{i}", "action", 0.0, "next_obs", False)
     
     assert len(buffer) == capacity
-    # Check that the first element is now 'obs_5' because the first 5 were pushed out
     assert buffer.memory[0][0] == "obs_5"
 
 @pytest.mark.parametrize("action_space_def", [
     ("continuous", gym.spaces.Box(low=-1, high=1, shape=(3,))),
     ("discrete_small", gym.spaces.Discrete(7)),
-    ("discrete_large", gym.spaces.Discrete(18)) # For Craftium
+    ("discrete_large", gym.spaces.Discrete(18)) 
 ])
 def test_sample_sequences_shape(action_space_def):
     """Tests if sampled sequences have the correct shape for different action spaces."""
@@ -45,7 +44,6 @@ def test_sample_sequences_shape(action_space_def):
     seq_len = 10
     batch_size = 4
     
-    # Populate with one long episode
     for i in range(50):
         done = (i == 49)
         action = action_space.sample()
@@ -53,55 +51,45 @@ def test_sample_sequences_shape(action_space_def):
     
     batch = buffer.sample_sequences(batch_size, seq_len)
     assert batch is not None, "Sampling failed with enough data."
-    obs_b, act_b, rew_b = batch
+    
+    # *** FIX: Unpack 4 values now ***
+    obs_b, act_b, rew_b, done_b = batch
     
     assert obs_b.shape == (batch_size, seq_len, 1, *config.RESIZE_DIM)
     assert act_b.shape == (batch_size, seq_len, *action_shape)
     assert rew_b.shape == (batch_size, seq_len, 1)
+    assert done_b.shape == (batch_size, seq_len, 1) # Check the new tensor
 
 def test_sample_sequences_avoids_episode_boundary():
     """
-    Ensures that sampled sequences do not cross episode boundaries by checking
-    the 'done' flags of the returned sequences.
+    Ensures that sampled sequences do not cross episode boundaries.
     """
     buffer = ReplayBuffer(capacity=100)
     seq_len = 10
-    batch_size = 5 # Sample a few times to increase chance of catching errors
+    batch_size = 5
 
-    # Create two episodes of 20 steps each.
-    # We'll use the observation `i` to track the step number.
     for i in range(20):
         buffer.push(np.array([i]), np.array([0]), 0.0, 0, done=(i == 19))
     for i in range(20, 40):
         buffer.push(np.array([i]), np.array([0]), 0.0, 0, done=(i == 39))
 
-    # The buffer now contains transitions 0..19 (ep 1) and 20..39 (ep 2).
-    # The `done` flag is True at indices 19 and 39.
-    
-    # Run the sampling 50 times to be thorough
     for _ in range(50):
         batch = buffer.sample_sequences(batch_size, seq_len)
         if batch is None:
-            # This can happen if not enough valid sequences are found
             continue
-
-        obs_seq, _, _ = batch
+        
+        # *** FIX: Unpack 4 values now ***
+        obs_seq, _, _, _ = batch
         all_sampled_obs = obs_seq.cpu().numpy()
 
         for seq in all_sampled_obs:
-            # The 'observation' in our dummy data is just the step number.
             step_numbers = seq.flatten().astype(int)
-            
-            # A valid sequence should be contiguous (e.g., [5, 6, 7...]).
-            # If it crosses an episode, it will jump, e.g., from 19 to 20.
-            # Our sampling method is supposed to prevent this.
             is_contiguous = np.all(np.diff(step_numbers) == 1)
-            assert is_contiguous, f"Sequence is not contiguous, it might have crossed an episode boundary: {step_numbers}"
+            assert is_contiguous, f"Sequence crossed episode boundary: {step_numbers}"
         
 def test_sample_returns_none_if_not_enough_data():
     """Tests that sampling returns None if the buffer is too small."""
     buffer = ReplayBuffer(capacity=100)
-    # Populate with fewer steps than sequence length
     for _ in range(config.SEQUENCE_LENGTH - 1):
         buffer.push(0,0,0,0,False)
         
@@ -113,7 +101,6 @@ def test_sample_transitions_shape_and_type():
     batch_size = config.BATCH_SIZE
     action_dim = 3
     
-    # Populate buffer
     for _ in range(batch_size * 2):
         buffer.push(
             np.random.rand(1, *config.RESIZE_DIM), 

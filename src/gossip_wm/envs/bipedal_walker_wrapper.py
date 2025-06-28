@@ -1,3 +1,4 @@
+# src/gossip_wm/envs/bipedal_walker_wrapper.py
 import gymnasium as gym
 import numpy as np
 import cv2
@@ -25,6 +26,12 @@ class BipedalWalkerWrapper(BaseEnvWrapper):
     @property
     def action_space(self):
         return self._action_space
+        
+    # *** FIX: Fulfill the abstract base class contract. ***
+    # This method is not used because step() and reset() are overridden,
+    # but it must exist.
+    def observation(self, obs):
+        pass
 
     def _get_pixel_obs(self):
         obs = self.env.render()
