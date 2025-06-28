@@ -119,27 +119,83 @@ def plot_loss_curves(losses, title, filename, run_dir):
     plt.close()
     print(f"Saved loss plot to {save_path}")
 
+def load_buffer_from_file(buffer_path, capacity):
+    """
+    Loads a random sample of transitions from a file into a ReplayBuffer
+    using Reservoir Sampling to avoid loading the entire file into memory.
+    """
+    def unpickle_stream(f):
+        """Generator to yield objects from a pickle stream."""
+        while True:
+            try:
+                yield pickle.load(f)
+            except EOFError:
+                break
+
+    if not os.path.exists(buffer_path):
+        print(f"ERROR: Replay buffer not found at '{buffer_path}'.")
+        return None
+
+    print(f"Streaming transitions from {buffer_path} into replay buffer (capacity: {capacity})...")
+    
+    reservoir = []
+    try:
+        with open(buffer_path, 'rb') as f:
+            # Use a generator to stream objects from the file
+            transitions_stream = unpickle_stream(f)
+            
+            # Use tqdm to show progress of streaming from disk
+            for i, transition in enumerate(tqdm(transitions_stream, desc="Streaming from disk")):
+                if i < capacity:
+                    # Fill the reservoir up to its capacity
+                    reservoir.append(transition)
+                else:
+                    # With probability capacity / (i+1), replace a random element
+                    j = random.randint(0, i)
+                    if j < capacity:
+                        reservoir[j] = transition
+    except Exception as e:
+        print(f"An error occurred while loading the buffer: {e}")
+        return None
+
+    # Create the final ReplayBuffer and push the sampled transitions
+    buffer = ReplayBuffer(capacity=capacity)
+    for transition in reservoir:
+        buffer.push(*transition)
+
+    print(f"\nSuccessfully loaded a random sample of {len(buffer)} transitions into memory.")
+    return buffer
+
+
 def generate_and_save_buffer(num_steps, save_path):
-    """Generates experience by running a random agent and saves the buffer to disk."""
+    """
+    Generates experience by running a random agent and saves the transitions
+    to disk one by one to conserve RAM.
+    """
     print(f"--- Generating {num_steps} steps of experience for {config.ENV_NAME} ---")
     
     env = make_env(config.ENV_NAME)
-    buffer = ReplayBuffer(capacity=num_steps) # Capacity is the number of steps to generate
-    
     obs, _ = env.reset()
-    for _ in tqdm(range(num_steps), desc="Generating Data"):
-        action = env.action_space.sample()
-        next_obs, reward, terminated, truncated, _ = env.step(action)
-        done = terminated or truncated
-        buffer.push(obs, action, reward, next_obs, done)
-        obs = next_obs if not done else env.reset()[0]
-        
-    env.close()
     
-    # Save the populated buffer to a file
-    with open(save_path, 'wb') as f:
-        pickle.dump(buffer, f)
-    print(f"\nSuccessfully saved replay buffer with {len(buffer)} transitions to {save_path}")
+    transitions_saved = 0
+    try:
+        with open(save_path, 'wb') as f:
+            pbar = tqdm(range(num_steps), desc="Generating Data")
+            for _ in pbar:
+                action = env.action_space.sample()
+                next_obs, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
+                
+                # The transition is a tuple of numpy arrays and primitive types
+                transition = (obs, action, reward, next_obs, done)
+                pickle.dump(transition, f)
+                transitions_saved += 1
+                
+                obs = next_obs if not done else env.reset()[0]
+    finally:
+        env.close()
+    
+    print(f"\nSuccessfully saved {transitions_saved} transitions to {save_path}")
 
 ### =================================================================
 ###                   TRAINING FUNCTION: VAE
@@ -149,13 +205,8 @@ def train_vae_only(run_dir, buffer_path, num_steps=10000):
     """Trains only the VAE component of the World Model."""
     print("--- Training Mode: VAE Only ---")
     
-    try:
-        with open(buffer_path, 'rb') as f:
-            buffer = pickle.load(f)
-        print(f"Successfully loaded replay buffer from {buffer_path}")
-    except FileNotFoundError:
-        print(f"ERROR: Replay buffer not found at '{buffer_path}'.")
-        print("Please run --mode data first to generate a buffer.")
+    buffer = load_buffer_from_file(buffer_path, capacity=config.BUFFER_CAPACITY)
+    if buffer is None:
         return
     
     env_config = config.get_env_config()
@@ -224,13 +275,8 @@ def train_dynamics_baseline(run_dir, vae_run_id, buffer_path, num_steps=10000):
         return
 
     env = make_env(config.ENV_NAME)
-        # --- UPDATED: Load buffer from file ---
-    try:
-        with open(buffer_path, 'rb') as f:
-            pixel_buffer = pickle.load(f)
-        print(f"Successfully loaded replay buffer from {buffer_path}")
-    except FileNotFoundError:
-        print(f"ERROR: Replay buffer not found at '{buffer_path}'.")
+    pixel_buffer = load_buffer_from_file(buffer_path, capacity=config.BUFFER_CAPACITY)
+    if pixel_buffer is None:
         return
     # ... (data collection)
     
@@ -331,12 +377,8 @@ def train_gossip(run_dir, vae_run_id, buffer_path, num_agents, num_steps=15000):
         return
 
     # Load and pre-encode the replay buffer
-    try:
-        with open(buffer_path, 'rb') as f:
-            pixel_buffer = pickle.load(f)
-        print(f"Successfully loaded replay buffer from {buffer_path}")
-    except FileNotFoundError:
-        print(f"ERROR: Replay buffer not found at '{buffer_path}'.")
+    pixel_buffer = load_buffer_from_file(buffer_path, capacity=config.BUFFER_CAPACITY)
+    if pixel_buffer is None:
         return
         
     latent_buffer_list = pre_encode_buffer(models[0], pixel_buffer)

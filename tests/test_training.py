@@ -1,9 +1,17 @@
 import pytest
 import torch
 import numpy as np
+import os
 
 from gossip_wm import config
-from gossip_wm.training import calculate_beta, plot_loss_curves, save_reconstruction_images, visualize_dreams
+from gossip_wm.training import (
+    calculate_beta, 
+    plot_loss_curves, 
+    save_reconstruction_images, 
+    visualize_dreams,
+    generate_and_save_buffer,
+    load_buffer_from_file
+)
 from gossip_wm.models import WorldModel
 
 def test_calculate_beta():
@@ -78,3 +86,44 @@ def test_visualize_dreams(mocker, tmp_path, world_model):
     mock_save_image.assert_called_once()
     call_args, _ = mock_save_image.call_args
     assert call_args[1] == str(expected_path)
+
+def test_buffer_generation_and_loading_respects_capacity(tmp_path):
+    """
+    Tests that generating a buffer to disk and loading it with Reservoir Sampling
+    correctly respects the specified memory capacity.
+    """
+    # 1. Setup
+    original_env_name = config.ENV_NAME
+    config.ENV_NAME = "CarRacing-v3" # Use a known env for data generation
+    
+    total_steps_on_disk = 500
+    buffer_capacity_in_ram = 100
+    batch_size = 32
+
+    buffer_path = tmp_path / "test_buffer.pkl"
+
+    # 2. Generate a buffer file with more steps than the target capacity
+    generate_and_save_buffer(num_steps=total_steps_on_disk, save_path=str(buffer_path))
+    assert os.path.exists(buffer_path)
+
+    # 3. Load the buffer from the file using the new function
+    # This should use reservoir sampling to only load `buffer_capacity_in_ram` samples.
+    buffer = load_buffer_from_file(str(buffer_path), capacity=buffer_capacity_in_ram)
+
+    # 4. Assertions
+    assert buffer is not None, "Buffer loading failed."
+    
+    # --- The most important check ---
+    # The buffer in memory should have a length equal to the capacity,
+    # NOT the total number of steps on disk.
+    assert len(buffer) == buffer_capacity_in_ram
+    assert len(buffer) != total_steps_on_disk
+
+    # Check that we can sample from the loaded buffer
+    batch = buffer.sample_transitions(batch_size)
+    assert batch is not None
+    assert len(batch) == 5 # obs, action, reward, next_obs, done
+    assert batch[0].shape[0] == batch_size # Check batch size of obs
+
+    # 5. Teardown
+    config.ENV_NAME

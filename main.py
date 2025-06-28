@@ -35,16 +35,16 @@ def save_config(run_dir, args):
 
 
 def setup_run_directories(mode, run_id, num_agents):
-    # ... (this function is correct and remains the same)
     base_run_dir = os.path.join("runs", mode, run_id)
     os.makedirs(os.path.join(base_run_dir, "models"), exist_ok=True)
     if mode == "vae":
         os.makedirs(os.path.join(base_run_dir, "reconstructions"), exist_ok=True)
     elif mode == "dynamics":
-        os.makedirs(os.path.join(base_run_dir, "dreams"), exist_ok=True)
+        # The training function creates the agent-specific dream folders
+        pass
     elif mode == "gossip":
-        for i in range(num_agents):
-            os.makedirs(os.path.join(base_run_dir, f"dreams_agent_{i}"), exist_ok=True)
+        # The training function creates the agent-specific dream folders
+        pass
     print(f"Created run directory structure in: {base_run_dir}")
     return base_run_dir
 
@@ -55,54 +55,92 @@ def main():
         "--mode", 
         type=str, 
         required=True, 
-        choices=["data", "vae", "dynamics", "gossip"], # <-- Added 'data'
+        choices=["data", "vae", "dynamics", "gossip"],
         help="The action to perform."
     )
     parser.add_argument(
         "--steps",
         type=int,
-        default=10000,
+        default=20000,
         help="Number of steps for data generation or training."
     )
-    # --- ADDED: Argument for buffer path ---
+    # UPDATED: No more default buffer path, as it's now dynamic
     parser.add_argument(
         "--buffer_path",
         type=str,
-        default="data/replay_buffer.pkl",
-        help="Path to save/load the replay buffer."
+        default=None,
+        help="Path to a specific replay buffer. If not set, a default path will be used based on the environment."
+    )
+    parser.add_argument(
+        "--env_name", 
+        type=str, 
+        default=None,
+        help="Specify a single environment. Overrides the config default. Required for training modes."
     )
     parser.add_argument("--num_agents", type=int, default=config.GOSSIP_NUM_AGENTS)
-    parser.add_argument("--vae_run_id", type=str, help="The run_id of the pre-trained VAE to use.")
+    parser.add_argument("--vae_run_id", type=str, help="The run_id of the pre-trained VAE to use for dynamics/gossip training.")
     
     args = parser.parse_args()
 
+    # Handle data generation mode first
     if args.mode == "data":
-        # Data generation doesn't need a unique run directory
         os.makedirs("data", exist_ok=True)
-        generate_and_save_buffer(num_steps=args.steps, save_path=args.buffer_path)
+        
+        if args.env_name:
+            # Generate for a single specified environment
+            if args.env_name not in config.ENV_CONFIGS:
+                parser.error(f"--env_name '{args.env_name}' is not a valid environment.")
+            envs_to_generate = [args.env_name]
+        else:
+            # Generate for all environments
+            envs_to_generate = list(config.ENV_CONFIGS.keys())
+            print("--- Generating data for ALL supported environments. ---")
+
+        for env_name in envs_to_generate:
+            config.ENV_NAME = env_name # Set the global config for this iteration
+            buffer_path = f"data/buffer_{env_name}.pkl"
+            generate_and_save_buffer(num_steps=args.steps, save_path=buffer_path)
+            
         return # Exit after generating data
 
     # --- The rest of the logic is for training modes ---
+    
+    # For training modes, an environment must be specified.
+    if not args.env_name:
+        parser.error("--env_name is required for training modes (vae, dynamics, gossip).")
+    if args.env_name not in config.ENV_CONFIGS:
+        parser.error(f"Specified --env_name '{args.env_name}' is not a valid environment.")
+    
+    # Set the global environment name for the entire training run
+    config.ENV_NAME = args.env_name
+    print(f"--- Running in mode '{args.mode}' for environment '{config.ENV_NAME}' ---")
+
+    # Determine the buffer path to use for training
+    buffer_path = args.buffer_path or f"data/buffer_{config.ENV_NAME}.pkl"
+    if not os.path.exists(buffer_path):
+        parser.error(f"Replay buffer not found at '{buffer_path}'. Please generate it first with --mode data.")
+    print(f"Using replay buffer: {buffer_path}")
+
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
     unique_hex = secrets.token_hex(3)
-    run_id = f"{timestamp}_{unique_hex}"
+    run_id = f"{config.ENV_NAME}_{timestamp}_{unique_hex}"
     
     run_dir = setup_run_directories(args.mode, run_id, args.num_agents)
     save_config(run_dir, args)
 
     if args.mode == "vae":
-        train_vae_only(run_dir=run_dir, buffer_path=args.buffer_path, num_steps=args.steps)
+        train_vae_only(run_dir=run_dir, buffer_path=buffer_path, num_steps=args.steps)
         
     elif args.mode == "dynamics":
         if not args.vae_run_id: parser.error("--vae_run_id is required for 'dynamics' mode.")
-        train_dynamics_baseline(run_dir=run_dir, vae_run_id=args.vae_run_id, buffer_path=args.buffer_path, num_steps=args.steps)
+        train_dynamics_baseline(run_dir=run_dir, vae_run_id=args.vae_run_id, buffer_path=buffer_path, num_steps=args.steps)
         
     elif args.mode == "gossip":
         if not args.vae_run_id: parser.error("--vae_run_id is required for 'gossip' mode.")
         train_gossip(
             run_dir=run_dir, 
             vae_run_id=args.vae_run_id, 
-            buffer_path=args.buffer_path,
+            buffer_path=buffer_path,
             num_agents=args.num_agents, 
             num_steps=args.steps
         )
