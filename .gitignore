@@ -19,5 +19,8 @@ models/
 *.gif
 runs/
 
-# data
+# Code
+craftium
+
+# Data
 *.pkl

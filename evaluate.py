@@ -3,6 +3,7 @@
 import argparse
 import os
 import torch
+import torch.nn.functional as F
 import numpy as np
 import imageio
 from tqdm import tqdm
@@ -53,9 +54,14 @@ def generate_dream_sequence(model, start_obs, num_frames=500, stochastic=False, 
     dream_frames = []
     upscale_dim = (256, 256)
 
+    env_conf = config.get_env_config()
+    is_discrete = env_conf['IS_DISCRETE']
+    action_dim = env_conf['ACTION_DIM']
+
     with torch.no_grad():
         start_obs_tensor = torch.from_numpy(start_obs).unsqueeze(0).to(config.DEVICE)
-        z, _ = model.vae.encoder(start_obs_tensor)
+        mu_start, _ = model.vae.encoder(start_obs_tensor)
+        z = mu_start
         hidden = None
         
         for i in tqdm(range(num_frames), desc="Dreaming..."):
@@ -66,10 +72,19 @@ def generate_dream_sequence(model, start_obs, num_frames=500, stochastic=False, 
             dream_frames.append((upscaled_frame * 255).astype(np.uint8))
 
             if dynamic_action:
-                steer = np.sin(i * 0.1) * 0.6
-                action = torch.tensor([steer, 0.3, 0.0], dtype=torch.float32).unsqueeze(0).to(config.DEVICE)
+                if is_discrete:
+                    # Cycle through first 5 movement actions (nop, fwd, back, left, right)
+                    action_idx = (i // 10) % 5
+                    action = F.one_hot(torch.tensor(action_idx), num_classes=action_dim).float().unsqueeze(0).to(config.DEVICE)
+                else:
+                    steer = np.sin(i * 0.1) * 0.6
+                    action = torch.tensor([steer, 0.3, 0.0], dtype=torch.float32).unsqueeze(0).to(config.DEVICE)
             else:
-                action = torch.tensor([0.0, 0.5, 0.0], dtype=torch.float32).unsqueeze(0).to(config.DEVICE)
+                if is_discrete:
+                    action_idx = 1 # Use "forward" as a default action
+                    action = F.one_hot(torch.tensor(action_idx), num_classes=action_dim).float().unsqueeze(0).to(config.DEVICE)
+                else:
+                    action = torch.tensor([0.0, 0.5, 0.0], dtype=torch.float32).unsqueeze(0).to(config.DEVICE)
 
             mu, logvar, hidden = model.transition(z, action, hidden)
             
@@ -124,11 +139,11 @@ def main():
     device = config.DEVICE
     print(f"Using device: {device}")
     
-    PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+    PROJECT_ROOT = pathlib.Path(__file__).resolve().parent
     EVAL_DIR = PROJECT_ROOT / "evaluations"
     os.makedirs(EVAL_DIR, exist_ok=True)
     
-    env = make_env(config.ENV_NAME, render_mode=None) 
+    env = make_env(config.ENV_NAME) 
     start_obs, _ = env.reset(seed=args.seed)
     env.close()
 

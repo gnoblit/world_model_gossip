@@ -49,7 +49,7 @@ ENV_CONFIGS = {
         "GYM_KWARGS": {"render_mode": "rgb_array"}
     },
     # --- Placeholders for our future environments ---
-    "LunarLander-v2": {
+    "LunarLander-v3": { # CORRECTED: Changed v2 to v3
         "ACTION_DIM": 4, # 0:noop, 1:fire-left, 2:fire-main, 3:fire-right
         "IS_DISCRETE": True,
         "GYM_KWARGS": {"render_mode": "rgb_array", "continuous": False}
@@ -59,15 +59,10 @@ ENV_CONFIGS = {
         "IS_DISCRETE": True,
         "GYM_KWARGS": {} # No special kwargs needed
     },
-    "Crafter-v1": {
-        "ACTION_DIM": 17,
+    "VizdoomBasic-v0": {
+        "ACTION_DIM": 3, # 0: ATTACK, 1: MOVE_RIGHT, 2: MOVE_LEFT
         "IS_DISCRETE": True,
-        "GYM_KWARGS": {}
-    },
-    "MineRLObtainDiamond-v0": {
-        "ACTION_DIM": 8, # Using our simplified action space
-        "IS_DISCRETE": True,
-        "GYM_KWARGS": {}
+        "GYM_KWARGS": {} # No special kwargs needed
     }
 }
 

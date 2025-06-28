@@ -113,9 +113,12 @@ class TransitionModel(nn.Module):
         # The input to the GRU is the concatenation of the latent state and action
         self.gru = nn.GRU(latent_dim + action_dim, hidden_dim, batch_first=True)
         
-        # The output of the GRU is projected to the parameters of the next latent state
+        # Head 1: Predicts the next latent state distribution
         self.fc_mu = nn.Linear(hidden_dim, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim, latent_dim)
+
+        # Head 2: Predicts the 'done' probability (a single logit)
+        self.fc_done = nn.Linear(hidden_dim, 1)
 
     def forward(self, z, action, hidden=None):
         """
@@ -138,9 +141,10 @@ class TransitionModel(nn.Module):
         # Get mu and logvar for the *next* latent state
         next_z_mu = self.fc_mu(gru_out)
         next_z_logvar = self.fc_logvar(gru_out)
+        done_logit = self.fc_done(gru_out) # Logit for the 'done' prediction
         
-        return next_z_mu, next_z_logvar, next_hidden
-
+        return next_z_mu, next_z_logvar, done_logit, next_hidden
+    
 class WorldModel(nn.Module):
     """
     The complete World Model, combining the VAE and the Transition Model.

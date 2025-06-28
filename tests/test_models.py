@@ -1,9 +1,12 @@
+import pytest
 import torch
+import torch.nn.functional as F
 
 from gossip_wm import config
-from gossip_wm.models import reparameterize, vae_loss_function
+from gossip_wm.models import reparameterize, vae_loss_function, WorldModel, TransitionModel
+from tests.conftest import SUPPORTED_ENVS
 
-# Note: Models are imported from conftest.py as fixtures
+# Note: VAE and some other models are imported from conftest.py as fixtures
 
 def test_reparameterize(dummy_latent_batch):
     """Tests the reparameterization trick."""
@@ -54,24 +57,80 @@ def test_vae_loss_function(vae_model, dummy_obs_batch, device):
     assert loss.shape == torch.Size([]) # A scalar tensor has an empty shape
     assert loss.item() >= 0.0, "Loss must be non-negative."
 
-def test_transition_model_shapes(transition_model, dummy_sequence_batch, device):
-    """Tests the output shapes of the TransitionModel."""
-    _, act_seq = dummy_sequence_batch
+@pytest.mark.parametrize("env_name", SUPPORTED_ENVS)
+def test_transition_model_shapes_all_envs(env_name, device):
+    """Tests the output shapes of the TransitionModel for all envs."""
+    original_env_name = config.ENV_NAME
+    config.ENV_NAME = env_name
+    env_specific_config = config.get_env_config()
+    action_dim = env_specific_config['ACTION_DIM']
+    is_discrete = env_specific_config['IS_DISCRETE']
+
+    model = TransitionModel(
+        latent_dim=config.LATENT_DIM,
+        action_dim=action_dim,
+        hidden_dim=config.TRANSITION_HIDDEN_DIM
+    ).to(device)
+    model.eval()
+
     z_seq = torch.randn(
         config.BATCH_SIZE, config.SEQUENCE_LENGTH, config.LATENT_DIM
     ).to(device)
-    act_seq = act_seq.to(device)
+    
+    if is_discrete:
+        # For discrete actions, create integer indices and one-hot encode them
+        act_indices = torch.randint(0, action_dim, (config.BATCH_SIZE, config.SEQUENCE_LENGTH))
+        act_seq = F.one_hot(act_indices, num_classes=action_dim).float().to(device)
+    else:
+        # For continuous actions, create random floats
+        act_seq = torch.rand(config.BATCH_SIZE, config.SEQUENCE_LENGTH, action_dim).to(device)
     
     # We predict the next T-1 states from the first T-1 states and actions
-    pred_mu, pred_logvar, hidden = transition_model(z_seq[:, :-1, :], act_seq[:, :-1, :])
+    pred_mu, pred_logvar, hidden = model(z_seq[:, :-1, :], act_seq[:, :-1, :])
     
     # Output should have T-1 sequence length
     expected_shape = (config.BATCH_SIZE, config.SEQUENCE_LENGTH - 1, config.LATENT_DIM)
     assert pred_mu.shape == expected_shape
     assert pred_logvar.shape == expected_shape
     assert hidden.shape == (1, config.BATCH_SIZE, config.TRANSITION_HIDDEN_DIM)
+    
+    config.ENV_NAME = original_env_name
 
-def test_world_model_creation(world_model):
-    """Tests that the full WorldModel can be instantiated."""
-    assert world_model.vae is not None
-    assert world_model.transition is not None
+@pytest.mark.parametrize("env_name", SUPPORTED_ENVS)
+def test_world_model_creation_all_envs(env_name, device):
+    """Tests that the full WorldModel can be instantiated for all envs."""
+    original_env_name = config.ENV_NAME
+    config.ENV_NAME = env_name
+    
+    model = WorldModel().to(device)
+    env_specific_config = config.get_env_config()
+
+    assert model.vae is not None
+    assert model.transition is not None
+    assert model.transition.action_dim == env_specific_config['ACTION_DIM']
+
+    config.ENV_NAME = original_env_name
+
+def test_world_model_load_vae_weights(world_model, vae_model, tmp_path):
+    """Tests the utility function to load pre-trained VAE weights."""
+    vae_path = tmp_path / "vae.pth"
+    torch.save(vae_model.state_dict(), vae_path)
+    
+    # Create a new world model with random VAE weights
+    config.ENV_NAME = "CarRacing-v3" # Ensure config is set
+    fresh_world_model = WorldModel().to(config.DEVICE)
+    
+    # Check that weights are different before loading
+    assert not torch.equal(
+        fresh_world_model.vae.encoder.conv1.weight,
+        vae_model.encoder.conv1.weight
+    )
+    
+    # Load weights
+    fresh_world_model.load_vae_weights(path=vae_path)
+    
+    # Check that weights are the same after loading
+    assert torch.equal(
+        fresh_world_model.vae.encoder.conv1.weight,
+        vae_model.encoder.conv1.weight
+    )

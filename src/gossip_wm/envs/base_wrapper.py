@@ -10,7 +10,9 @@ class BaseEnvWrapper(gym.Wrapper, ABC):
     as well as the `observation` method.
     
     It relies on the parent `gym.Wrapper` to automatically handle the `step`
-    and `reset` logic.
+    and `reset` logic for most environments. For environments that need an
+    explicit `.render()` call to get pixel observations (like Box2D),
+    the specific wrappers should override `step` and `reset`.
     """
     def __init__(self, env):
         super().__init__(env)
@@ -32,3 +34,12 @@ class BaseEnvWrapper(gym.Wrapper, ABC):
         """The method for preprocessing observations."""
         raise NotImplementedError
     
+    def step(self, action):
+        """Default step behavior, assumes the environment returns pixel observations."""
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        return self.observation(obs), reward, terminated, truncated, info
+
+    def reset(self, **kwargs):
+        """Default reset behavior, assumes the environment returns pixel observations."""
+        obs, info = self.env.reset(**kwargs)
+        return self.observation(obs), info

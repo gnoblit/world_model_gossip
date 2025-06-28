@@ -67,11 +67,13 @@ class ReplayBuffer:
         batch_start_indices = np.random.choice(valid_indices, size=batch_size, replace=False)
         sequences = [list(self.memory)[i : i + seq_len] for i in batch_start_indices]
         
-        obs_seqs, act_seqs, rew_seqs, _, _ = zip(*[zip(*seq) for seq in sequences])
+        obs_seqs, act_seqs, rew_seqs, _, done_seqs = zip(*[zip(*seq) for seq in sequences])
+
 
         obs_batch = torch.from_numpy(np.array(obs_seqs)).float().to(config.DEVICE)
         action_batch = torch.from_numpy(np.array(act_seqs)).float().to(config.DEVICE)
         reward_batch = torch.from_numpy(np.array(rew_seqs)).float().to(config.DEVICE).unsqueeze(-1)
+        done_batch = torch.from_numpy(np.array(done_seqs, dtype=np.float32)).float().to(config.DEVICE).unsqueeze(-1)
 
         return obs_batch, action_batch, reward_batch
 
