@@ -33,10 +33,9 @@ def test_buffer_capacity():
 @pytest.mark.parametrize("action_space_def", [
     ("continuous", gym.spaces.Box(low=-1, high=1, shape=(3,))),
     ("discrete_small", gym.spaces.Discrete(7)),
-    ("discrete_large", gym.spaces.Discrete(18)) 
+    ("discrete_large", gym.spaces.Discrete(18))
 ])
 def test_sample_sequences_shape(action_space_def):
-    """Tests if sampled sequences have the correct shape for different action spaces."""
     action_type, action_space = action_space_def
     action_shape = action_space.shape if action_type.startswith("continuous") else ()
 
@@ -44,21 +43,23 @@ def test_sample_sequences_shape(action_space_def):
     seq_len = 10
     batch_size = 4
     
+    # Get resize_dim from default config for creating dummy data
+    env_conf = config.ENV_CONFIGS[config.ENV_NAME]
+    resize_dim = env_conf['RESIZE_DIM']
+    
     for i in range(50):
         done = (i == 49)
         action = action_space.sample()
-        buffer.push(np.random.rand(1, *config.RESIZE_DIM), action, 1.0, None, done)
+        buffer.push(np.random.rand(1, *resize_dim), action, 1.0, None, done)
     
     batch = buffer.sample_sequences(batch_size, seq_len)
     assert batch is not None, "Sampling failed with enough data."
-    
-    # *** FIX: Unpack 4 values now ***
     obs_b, act_b, rew_b, done_b = batch
     
-    assert obs_b.shape == (batch_size, seq_len, 1, *config.RESIZE_DIM)
+    assert obs_b.shape == (batch_size, seq_len, 1, *resize_dim)
     assert act_b.shape == (batch_size, seq_len, *action_shape)
     assert rew_b.shape == (batch_size, seq_len, 1)
-    assert done_b.shape == (batch_size, seq_len, 1) # Check the new tensor
+    assert done_b.shape == (batch_size, seq_len, 1)
 
 def test_sample_sequences_avoids_episode_boundary():
     """
@@ -96,17 +97,19 @@ def test_sample_returns_none_if_not_enough_data():
     assert buffer.sample_sequences(config.BATCH_SIZE, config.SEQUENCE_LENGTH) is None
 
 def test_sample_transitions_shape_and_type():
-    """Tests the shape and type of single transition samples."""
     buffer = ReplayBuffer(capacity=100)
     batch_size = config.BATCH_SIZE
     action_dim = 3
     
+    env_conf = config.ENV_CONFIGS[config.ENV_NAME]
+    resize_dim = env_conf['RESIZE_DIM']
+    
     for _ in range(batch_size * 2):
         buffer.push(
-            np.random.rand(1, *config.RESIZE_DIM), 
+            np.random.rand(1, *resize_dim), 
             np.random.rand(action_dim), 
             1.0, 
-            np.random.rand(1, *config.RESIZE_DIM), 
+            np.random.rand(1, *resize_dim), 
             False
         )
     
@@ -115,7 +118,7 @@ def test_sample_transitions_shape_and_type():
     obs_b, act_b, rew_b, next_obs_b, done_b = batch
 
     assert isinstance(obs_b, torch.Tensor)
-    assert obs_b.shape == (batch_size, 1, *config.RESIZE_DIM)
+    assert obs_b.shape == (batch_size, 1, *resize_dim)
     assert obs_b.device.type == config.DEVICE.type
 
     assert isinstance(act_b, torch.Tensor)

@@ -59,10 +59,12 @@ def test_save_reconstruction_images(mocker, tmp_path):
 
 def test_visualize_dreams(mocker, tmp_path, world_model):
     """Tests that the dream visualization function calls the saver."""
-    # CORRECTED: Mock the function where it is used.
     mock_save_image = mocker.patch("gossip_wm.training.save_image")
     
-    start_z = torch.randn(config.LATENT_DIM)
+    # Get latent_dim from the model fixture itself, which is robust
+    latent_dim = world_model.transition.latent_dim
+    start_z = torch.randn(latent_dim)
+    
     agent_id_str = "0"
     step = 500
     

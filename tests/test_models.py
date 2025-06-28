@@ -19,6 +19,7 @@ def test_reparameterize(dummy_latent_batch):
 
 def test_encoder_shapes(vae_model, dummy_obs_batch, device):
     """Tests the output shapes of the Encoder."""
+    config.ENV_NAME = "CarRacing-v3" # Ensure correct config state for this test
     dummy_obs_batch = dummy_obs_batch.to(device)
     mu, logvar = vae_model.encoder(dummy_obs_batch)
     
@@ -27,6 +28,7 @@ def test_encoder_shapes(vae_model, dummy_obs_batch, device):
 
 def test_decoder_shapes(vae_model, dummy_latent_batch, device):
     """Tests the output shape of the Decoder."""
+    config.ENV_NAME = "CarRacing-v3" # Ensure correct config state for this test
     dummy_latent_batch = dummy_latent_batch.to(device)
     recon = vae_model.decoder(dummy_latent_batch)
     
@@ -35,6 +37,7 @@ def test_decoder_shapes(vae_model, dummy_latent_batch, device):
 
 def test_vae_forward_pass(vae_model, dummy_obs_batch, device):
     """Tests the full forward pass of the VAE."""
+    config.ENV_NAME = "CarRacing-v3" # Ensure correct config state for this test
     dummy_obs_batch = dummy_obs_batch.to(device)
     recon, mu, logvar = vae_model(dummy_obs_batch)
     
@@ -64,44 +67,41 @@ def test_transition_model_shapes_all_envs(env_name, device):
     original_env_name = config.ENV_NAME
     config.ENV_NAME = env_name
     env_specific_config = config.get_env_config()
+
+    # Get model dimensions from the dynamic config
     action_dim = env_specific_config['ACTION_DIM']
     is_discrete = env_specific_config['IS_DISCRETE']
+    latent_dim = env_specific_config['LATENT_DIM']
+    hidden_dim = env_specific_config['TRANSITION_HIDDEN_DIM']
 
     model = TransitionModel(
-        latent_dim=config.LATENT_DIM,
+        latent_dim=latent_dim,
         action_dim=action_dim,
-        hidden_dim=config.TRANSITION_HIDDEN_DIM
+        hidden_dim=hidden_dim
     ).to(device)
     model.eval()
 
-    z_seq = torch.randn(
-        config.BATCH_SIZE, config.SEQUENCE_LENGTH, config.LATENT_DIM
-    ).to(device)
+    z_seq = torch.randn(config.BATCH_SIZE, config.SEQUENCE_LENGTH, latent_dim).to(device)
     
     if is_discrete:
-        # For discrete actions, create integer indices and one-hot encode them
         act_indices = torch.randint(0, action_dim, (config.BATCH_SIZE, config.SEQUENCE_LENGTH)).to(device)
         act_seq = F.one_hot(act_indices, num_classes=action_dim).float()
     else:
-        # For continuous actions, create random floats
         act_seq = torch.rand(config.BATCH_SIZE, config.SEQUENCE_LENGTH, action_dim).to(device)
     
-    # We predict the next T-1 states from the first T-1 states and actions
     pred_mu, pred_logvar, pred_done, next_hidden = model(z_seq[:, :-1, :], act_seq[:, :-1, :])
     
-    # Expected shape for latent vectors
-    expected_latent_shape = (config.BATCH_SIZE, config.SEQUENCE_LENGTH - 1, config.LATENT_DIM)
+    expected_latent_shape = (config.BATCH_SIZE, config.SEQUENCE_LENGTH - 1, latent_dim)
     assert pred_mu.shape == expected_latent_shape
     assert pred_logvar.shape == expected_latent_shape
     
-    # Expected shape for done logits (one logit per sequence step)
     expected_done_shape = (config.BATCH_SIZE, config.SEQUENCE_LENGTH - 1, 1)
     assert pred_done.shape == expected_done_shape
     
-    assert next_hidden.shape == (1, config.BATCH_SIZE, config.TRANSITION_HIDDEN_DIM)
+    assert next_hidden.shape == (1, config.BATCH_SIZE, hidden_dim)
     
     config.ENV_NAME = original_env_name
-
+    
 @pytest.mark.parametrize("env_name", SUPPORTED_ENVS)
 def test_world_model_creation_all_envs(env_name, device):
     """Tests that the full WorldModel can be instantiated for all envs."""

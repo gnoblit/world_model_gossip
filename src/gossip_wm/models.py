@@ -67,7 +67,7 @@ class VAE(nn.Module):
     """
     A complete Variational Autoencoder model.
     """
-    def __init__(self, latent_dim=config.LATENT_DIM):
+    def __init__(self, latent_dim):
         super(VAE, self).__init__()
         self.encoder = Encoder(latent_dim)
         self.decoder = Decoder(latent_dim)
@@ -154,12 +154,14 @@ class WorldModel(nn.Module):
 
         env_config = config.get_env_config()
         action_dim = env_config['ACTION_DIM']
+        latent_dim = env_config['LATENT_DIM']
+        hidden_dim = env_config['TRANSITION_HIDDEN_DIM']
 
-        self.vae = VAE(latent_dim=config.LATENT_DIM)
+        self.vae = VAE(latent_dim=latent_dim)
         self.transition = TransitionModel(
-            latent_dim=config.LATENT_DIM,
+            latent_dim=latent_dim,
             action_dim=action_dim,
-            hidden_dim=config.TRANSITION_HIDDEN_DIM
+            hidden_dim=hidden_dim
         )
 
     def load_vae_weights(self, path="vae_model.pth"):

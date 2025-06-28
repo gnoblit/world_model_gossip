@@ -158,6 +158,8 @@ def train_vae_only(run_dir, buffer_path, num_steps=10000):
         print("Please run --mode data first to generate a buffer.")
         return
     
+    env_config = config.get_env_config()
+    latent_dim = env_config['LATENT_DIM']
     model = VAE(latent_dim=config.LATENT_DIM).to(config.DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     

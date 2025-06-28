@@ -6,16 +6,13 @@ from .base_wrapper import BaseEnvWrapper
 from gossip_wm import config
 
 class LunarLanderWrapper(BaseEnvWrapper):
-    """
-    Wrapper for LunarLander. It needs to render the environment
-    to get pixel observations.
-    """
+    """Wrapper for LunarLander. It needs to render to get pixel obs."""
     def __init__(self, env):
         super().__init__(env)
+        env_conf = config.get_env_config()
+        self.resize_dim = env_conf['RESIZE_DIM']
         self._observation_space = gym.spaces.Box(
-            low=0.0, high=1.0, 
-            shape=(1, *config.RESIZE_DIM), 
-            dtype=np.float32
+            low=0.0, high=1.0, shape=(1, *self.resize_dim), dtype=np.float32
         )
         self._action_space = self.env.action_space
 
@@ -27,14 +24,13 @@ class LunarLanderWrapper(BaseEnvWrapper):
     def action_space(self):
         return self._action_space
 
-    # *** FIX: Fulfill the abstract base class contract. ***
     def observation(self, obs):
         pass
 
     def _get_pixel_obs(self):
         obs = self.env.render()
         gray_obs = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
-        resized_obs = cv2.resize(gray_obs, config.RESIZE_DIM, interpolation=cv2.INTER_AREA)
+        resized_obs = cv2.resize(gray_obs, self.resize_dim, interpolation=cv2.INTER_AREA)
         obs_with_channel = np.expand_dims(resized_obs, axis=0)
         return obs_with_channel.astype(np.float32) / 255.0
 
